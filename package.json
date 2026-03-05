@@ -1,0 +1,19 @@
+{
+  "name": "aem-cif-sso-extension",
+  "version": "1.0.0",
+  "description": "AEM CIF SSO Extension - Login with Adobe Commerce via OAuth2. Self-contained, auto-injecting. Compatible with AEM Extension Manager BYO.",
+  "main": "src/sso-extension.js",
+  "scripts": {
+    "build": "echo 'Extension is self-contained. Deploy web-src/ for Extension Manager and src/sso-extension.js for the storefront.'"
+  },
+  "keywords": [
+    "aem",
+    "cif",
+    "sso",
+    "oauth2",
+    "adobe-commerce",
+    "extension-manager",
+    "byo-extension"
+  ],
+  "license": "Apache-2.0"
+}

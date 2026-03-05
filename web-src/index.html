@@ -1,0 +1,56 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>AEM CIF SSO Extension</title>
+</head>
+<body>
+    <div id="root"></div>
+    <script type="module">
+        import { register } from 'https://esm.sh/@adobe/uix-guest@1.0.3';
+
+        const EXTENSION_ID = 'aem-cif-sso-extension';
+
+        async function init() {
+            const guestConnection = await register({
+                id: EXTENSION_ID,
+                methods: {
+                    commerce: {
+                        getStorefrontExtensions() {
+                            const config = guestConnection.configuration || {};
+                            return [{
+                                id: EXTENSION_ID,
+                                label: 'Login with Adobe Commerce (SSO)',
+                                storefrontScript: config.storefrontScriptUrl || '',
+                                configuration: {
+                                    commerceAuthorizeUrl: config.commerceAuthorizeUrl || '',
+                                    commerceTokenUrl: config.commerceTokenUrl || '',
+                                    clientId: config.clientId || '',
+                                    redirectUri: config.redirectUri || ''
+                                }
+                            }];
+                        }
+                    }
+                }
+            });
+
+            const config = guestConnection.configuration || {};
+            document.getElementById('root').innerHTML =
+                '<div style="padding:2rem;font-family:system-ui,sans-serif">' +
+                '<h2>AEM CIF SSO Extension</h2>' +
+                '<p>Extension registered successfully.</p>' +
+                '<h3>Current Configuration</h3>' +
+                '<table style="border-collapse:collapse">' +
+                '<tr><td style="padding:4px 12px;font-weight:600">Authorize URL</td><td>' + (config.commerceAuthorizeUrl || '<em>not set</em>') + '</td></tr>' +
+                '<tr><td style="padding:4px 12px;font-weight:600">Token URL</td><td>' + (config.commerceTokenUrl || '<em>not set</em>') + '</td></tr>' +
+                '<tr><td style="padding:4px 12px;font-weight:600">Client ID</td><td>' + (config.clientId || '<em>not set</em>') + '</td></tr>' +
+                '<tr><td style="padding:4px 12px;font-weight:600">Redirect URI</td><td>' + (config.redirectUri || '<em>not set</em>') + '</td></tr>' +
+                '<tr><td style="padding:4px 12px;font-weight:600">Script URL</td><td>' + (config.storefrontScriptUrl || '<em>not set</em>') + '</td></tr>' +
+                '</table></div>';
+        }
+
+        init().catch(console.error);
+    </script>
+</body>
+</html>
