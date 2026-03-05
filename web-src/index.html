@@ -28,9 +28,8 @@
         .ext-not-set { color: #b3b3b3; font-style: italic; }
         .ext-code { background: #f5f5f5; border: 1px solid #e1e1e1; border-radius: 4px; padding: 0.75rem; font-family: 'Source Code Pro', monospace; font-size: 0.75rem; white-space: pre-wrap; word-break: break-all; overflow-x: auto; margin-top: 0.5rem; }
         .ext-info { font-size: 0.8125rem; color: #6d6d6d; line-height: 1.5; }
-        .ext-info a { color: #1473e6; text-decoration: none; }
-        .ext-info a:hover { text-decoration: underline; }
     </style>
+    <script src="https://unpkg.com/@adobe/uix-guest@1.1.6/dist/iife/index.js"></script>
 </head>
 <body>
     <div class="ext-root" id="root">
@@ -43,7 +42,7 @@
         </div>
         <div class="ext-status ext-status--loading" id="status">
             <span class="ext-status__dot"></span>
-            <span id="status-text">Connecting to Extension Manager...</span>
+            <span id="status-text">Loading UIX SDK...</span>
         </div>
         <div class="ext-card" id="config-card" style="display:none">
             <h2>Configuration</h2>
@@ -51,19 +50,19 @@
         </div>
         <div class="ext-card" id="script-card" style="display:none">
             <h2>Storefront Script Tag</h2>
-            <p class="ext-info">Add this script tag to your AEM page template or Experience Fragment to load the SSO button on the storefront:</p>
+            <p class="ext-info">Add this to your AEM page template or Experience Fragment:</p>
             <div class="ext-code" id="script-tag"></div>
         </div>
         <div class="ext-card" id="error-card" style="display:none">
             <h2>Error Details</h2>
-            <p class="ext-info" id="error-details"></p>
+            <p class="ext-info" id="error-details" style="white-space:pre-wrap"></p>
         </div>
     </div>
 
-    <script type="module">
-        const EXTENSION_ID = 'aem-cif-sso-extension';
+    <script>
+        var EXTENSION_ID = 'aem-cif-sso-extension';
 
-        const CONFIG_KEYS = [
+        var CONFIG_KEYS = [
             { key: 'COMMERCE_AUTHORIZE_URL', label: 'Commerce Authorize URL', attr: 'data-authorize-url' },
             { key: 'COMMERCE_TOKEN_URL',     label: 'Commerce Token URL',     attr: 'data-token-url' },
             { key: 'CLIENT_ID',              label: 'OAuth Client ID',        attr: 'data-client-id' },
@@ -73,16 +72,16 @@
         ];
 
         function setStatus(type, text) {
-            const el = document.getElementById('status');
+            var el = document.getElementById('status');
             el.className = 'ext-status ext-status--' + type;
             document.getElementById('status-text').textContent = text;
         }
 
         function renderConfig(config) {
-            const table = document.getElementById('config-table');
-            let html = '';
+            var table = document.getElementById('config-table');
+            var html = '';
             CONFIG_KEYS.forEach(function(item) {
-                const val = config[item.key] || '';
+                var val = config[item.key] || '';
                 html += '<tr><td>' + item.label + '</td><td>' +
                     (val ? val : '<span class="ext-not-set">not configured</span>') +
                     '</td></tr>';
@@ -92,8 +91,8 @@
         }
 
         function renderScriptTag(config) {
-            const scriptUrl = config.STOREFRONT_SCRIPT_URL || 'https://YOUR-HOST/sso-extension.js';
-            let tag = '&lt;script\n';
+            var scriptUrl = config.STOREFRONT_SCRIPT_URL || 'https://mo-magento-custom-plugin.github.io/aem-cif-sso-extension/src/sso-extension.js';
+            var tag = '&lt;script\n';
             tag += '    src="' + scriptUrl + '"\n';
             tag += '    data-sso-extension\n';
             CONFIG_KEYS.forEach(function(item) {
@@ -106,60 +105,44 @@
             document.getElementById('script-card').style.display = '';
         }
 
-        async function loadUIXGuest() {
-            const cdns = [
-                'https://unpkg.com/@adobe/uix-guest@1/dist/index.mjs',
-                'https://esm.sh/@adobe/uix-guest@1'
-            ];
-            for (const url of cdns) {
-                try {
-                    const mod = await import(url);
-                    if (mod.register) return mod.register;
-                } catch (e) {
-                    console.warn('[SSO Extension] Failed to load from', url, e);
-                }
-            }
-            throw new Error('Could not load @adobe/uix-guest from any CDN');
-        }
-
-        async function init() {
-            let register;
-            try {
-                register = await loadUIXGuest();
-            } catch (err) {
-                setStatus('error', 'Failed to load UIX SDK');
-                document.getElementById('error-details').textContent = err.message;
+        function init() {
+            if (typeof AdobeUIXGuest === 'undefined' || !AdobeUIXGuest.register) {
+                setStatus('error', 'UIX SDK failed to load');
+                document.getElementById('error-details').textContent =
+                    'The @adobe/uix-guest library could not be loaded.\n' +
+                    'Check if unpkg.com is blocked by your network.';
                 document.getElementById('error-card').style.display = '';
                 return;
             }
 
-            try {
-                const guestConnection = await register({
-                    id: EXTENSION_ID,
-                    methods: {
-                        headerMenu: {
-                            getButtons() {
-                                return [];
-                            }
+            setStatus('loading', 'Connecting to Extension Manager...');
+
+            AdobeUIXGuest.register({
+                id: EXTENSION_ID,
+                methods: {
+                    headerMenu: {
+                        getButtons: function() {
+                            return [];
                         }
                     }
-                });
-
-                const config = guestConnection.configuration || {};
+                }
+            }).then(function(guestConnection) {
+                var config = guestConnection.configuration || {};
                 setStatus('ok', 'Connected to Extension Manager');
                 renderConfig(config);
                 renderScriptTag(config);
                 console.log('[SSO Extension] Registered. Config:', config);
-            } catch (err) {
+            }).catch(function(err) {
                 setStatus('error', 'Registration failed');
                 document.getElementById('error-details').textContent =
-                    err.message + '\n\nThis can happen if:\n' +
-                    '- The extension is opened outside Extension Manager\n' +
-                    '- The selected Supported Service does not match\n' +
+                    err.message + '\n\n' +
+                    'Possible causes:\n' +
+                    '- Opening this page outside Extension Manager iframe\n' +
+                    '- Supported Service mismatch (select "Content Fragments")\n' +
                     '- Extension Manager is temporarily unavailable';
                 document.getElementById('error-card').style.display = '';
                 console.error('[SSO Extension] Registration error:', err);
-            }
+            });
         }
 
         init();
