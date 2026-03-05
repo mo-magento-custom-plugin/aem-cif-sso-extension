@@ -1,10 +1,17 @@
 {
   "name": "aem-cif-sso-extension",
   "version": "1.0.0",
-  "description": "AEM CIF SSO Extension - Login with Adobe Commerce via OAuth2. Self-contained, auto-injecting. Compatible with AEM Extension Manager BYO.",
+  "description": "BYO (Bring Your Own) AEM extension that adds a 'Login with Adobe Commerce' OAuth2 SSO button to any CIF storefront sign-in form.",
   "main": "src/sso-extension.js",
+  "files": [
+    "src/",
+    "dist/",
+    "web-src/",
+    "README.md"
+  ],
   "scripts": {
-    "build": "echo 'Extension is self-contained. Deploy web-src/ for Extension Manager and src/sso-extension.js for the storefront.'"
+    "start": "npx serve . -l 3000",
+    "validate": "node -c src/sso-extension.js && node -c dist/loader.js && echo 'All files valid.'"
   },
   "keywords": [
     "aem",
@@ -13,7 +20,13 @@
     "oauth2",
     "adobe-commerce",
     "extension-manager",
-    "byo-extension"
+    "byo-extension",
+    "bring-your-own"
   ],
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/mo-magento-custom-plugin/aem-cif-sso-extension.git"
+  },
+  "homepage": "https://mo-magento-custom-plugin.github.io/aem-cif-sso-extension/",
   "license": "Apache-2.0"
 }

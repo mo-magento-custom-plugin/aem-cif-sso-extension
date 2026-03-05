@@ -4,53 +4,165 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>AEM CIF SSO Extension</title>
+    <style>
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+        body { font-family: adobe-clean, 'Source Sans Pro', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; color: #2c2c2c; background: #fafafa; }
+        .ext-root { max-width: 640px; margin: 2rem auto; padding: 1.5rem; }
+        .ext-header { display: flex; align-items: center; gap: 0.75rem; margin-bottom: 1.5rem; }
+        .ext-header svg { flex-shrink: 0; }
+        .ext-header h1 { font-size: 1.25rem; font-weight: 700; }
+        .ext-status { display: inline-flex; align-items: center; gap: 0.375rem; padding: 0.25rem 0.75rem; border-radius: 100px; font-size: 0.75rem; font-weight: 600; margin-bottom: 1rem; }
+        .ext-status--loading { background: #fff3cd; color: #856404; }
+        .ext-status--ok { background: #d4edda; color: #155724; }
+        .ext-status--error { background: #f8d7da; color: #721c24; }
+        .ext-status__dot { width: 8px; height: 8px; border-radius: 50%; }
+        .ext-status--loading .ext-status__dot { background: #856404; }
+        .ext-status--ok .ext-status__dot { background: #155724; }
+        .ext-status--error .ext-status__dot { background: #721c24; }
+        .ext-card { background: #fff; border: 1px solid #e1e1e1; border-radius: 8px; padding: 1.25rem; margin-bottom: 1rem; }
+        .ext-card h2 { font-size: 0.875rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em; color: #6d6d6d; margin-bottom: 0.75rem; }
+        .ext-table { width: 100%; border-collapse: collapse; font-size: 0.8125rem; }
+        .ext-table td { padding: 0.375rem 0; border-bottom: 1px solid #f0f0f0; vertical-align: top; }
+        .ext-table td:first-child { font-weight: 600; width: 40%; color: #4b4b4b; padding-right: 1rem; }
+        .ext-table td:last-child { word-break: break-all; }
+        .ext-not-set { color: #b3b3b3; font-style: italic; }
+        .ext-code { background: #f5f5f5; border: 1px solid #e1e1e1; border-radius: 4px; padding: 0.75rem; font-family: 'Source Code Pro', monospace; font-size: 0.75rem; white-space: pre-wrap; word-break: break-all; overflow-x: auto; margin-top: 0.5rem; }
+        .ext-info { font-size: 0.8125rem; color: #6d6d6d; line-height: 1.5; }
+        .ext-info a { color: #1473e6; text-decoration: none; }
+        .ext-info a:hover { text-decoration: underline; }
+    </style>
 </head>
 <body>
-    <div id="root"></div>
-    <script type="module">
-        import { register } from 'https://esm.sh/@adobe/uix-guest@1.0.3';
+    <div class="ext-root" id="root">
+        <div class="ext-header">
+            <svg width="32" height="32" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                <rect width="24" height="24" rx="4" fill="#EB1000"/>
+                <path d="M9.38 17.5H5.25V6.5l4.13 11zm4.99 0h-2.49L7.1 6.5h2.97l4.3 11zm4.38 0h-2.71l-4.2-11h2.71l4.2 11z" fill="#fff"/>
+            </svg>
+            <h1>AEM CIF SSO Extension</h1>
+        </div>
+        <div class="ext-status ext-status--loading" id="status">
+            <span class="ext-status__dot"></span>
+            <span id="status-text">Connecting to Extension Manager...</span>
+        </div>
+        <div class="ext-card" id="config-card" style="display:none">
+            <h2>Configuration</h2>
+            <table class="ext-table" id="config-table"></table>
+        </div>
+        <div class="ext-card" id="script-card" style="display:none">
+            <h2>Storefront Script Tag</h2>
+            <p class="ext-info">Add this script tag to your AEM page template or Experience Fragment to load the SSO button on the storefront:</p>
+            <div class="ext-code" id="script-tag"></div>
+        </div>
+        <div class="ext-card" id="error-card" style="display:none">
+            <h2>Error Details</h2>
+            <p class="ext-info" id="error-details"></p>
+        </div>
+    </div>
 
+    <script type="module">
         const EXTENSION_ID = 'aem-cif-sso-extension';
 
-        async function init() {
-            const guestConnection = await register({
-                id: EXTENSION_ID,
-                methods: {
-                    commerce: {
-                        getStorefrontExtensions() {
-                            const config = guestConnection.configuration || {};
-                            return [{
-                                id: EXTENSION_ID,
-                                label: 'Login with Adobe Commerce (SSO)',
-                                storefrontScript: config.storefrontScriptUrl || '',
-                                configuration: {
-                                    commerceAuthorizeUrl: config.commerceAuthorizeUrl || '',
-                                    commerceTokenUrl: config.commerceTokenUrl || '',
-                                    clientId: config.clientId || '',
-                                    redirectUri: config.redirectUri || ''
-                                }
-                            }];
-                        }
-                    }
-                }
-            });
+        const CONFIG_KEYS = [
+            { key: 'COMMERCE_AUTHORIZE_URL', label: 'Commerce Authorize URL', attr: 'data-authorize-url' },
+            { key: 'COMMERCE_TOKEN_URL',     label: 'Commerce Token URL',     attr: 'data-token-url' },
+            { key: 'CLIENT_ID',              label: 'OAuth Client ID',        attr: 'data-client-id' },
+            { key: 'REDIRECT_URI',           label: 'Redirect URI',           attr: 'data-redirect-uri' },
+            { key: 'STOREFRONT_SCRIPT_URL',  label: 'Storefront Script URL',  attr: null },
+            { key: 'BUTTON_LABEL',           label: 'Button Label',           attr: 'data-button-label' }
+        ];
 
-            const config = guestConnection.configuration || {};
-            document.getElementById('root').innerHTML =
-                '<div style="padding:2rem;font-family:system-ui,sans-serif">' +
-                '<h2>AEM CIF SSO Extension</h2>' +
-                '<p>Extension registered successfully.</p>' +
-                '<h3>Current Configuration</h3>' +
-                '<table style="border-collapse:collapse">' +
-                '<tr><td style="padding:4px 12px;font-weight:600">Authorize URL</td><td>' + (config.commerceAuthorizeUrl || '<em>not set</em>') + '</td></tr>' +
-                '<tr><td style="padding:4px 12px;font-weight:600">Token URL</td><td>' + (config.commerceTokenUrl || '<em>not set</em>') + '</td></tr>' +
-                '<tr><td style="padding:4px 12px;font-weight:600">Client ID</td><td>' + (config.clientId || '<em>not set</em>') + '</td></tr>' +
-                '<tr><td style="padding:4px 12px;font-weight:600">Redirect URI</td><td>' + (config.redirectUri || '<em>not set</em>') + '</td></tr>' +
-                '<tr><td style="padding:4px 12px;font-weight:600">Script URL</td><td>' + (config.storefrontScriptUrl || '<em>not set</em>') + '</td></tr>' +
-                '</table></div>';
+        function setStatus(type, text) {
+            const el = document.getElementById('status');
+            el.className = 'ext-status ext-status--' + type;
+            document.getElementById('status-text').textContent = text;
         }
 
-        init().catch(console.error);
+        function renderConfig(config) {
+            const table = document.getElementById('config-table');
+            let html = '';
+            CONFIG_KEYS.forEach(function(item) {
+                const val = config[item.key] || '';
+                html += '<tr><td>' + item.label + '</td><td>' +
+                    (val ? val : '<span class="ext-not-set">not configured</span>') +
+                    '</td></tr>';
+            });
+            table.innerHTML = html;
+            document.getElementById('config-card').style.display = '';
+        }
+
+        function renderScriptTag(config) {
+            const scriptUrl = config.STOREFRONT_SCRIPT_URL || 'https://YOUR-HOST/sso-extension.js';
+            let tag = '&lt;script\n';
+            tag += '    src="' + scriptUrl + '"\n';
+            tag += '    data-sso-extension\n';
+            CONFIG_KEYS.forEach(function(item) {
+                if (item.attr && config[item.key]) {
+                    tag += '    ' + item.attr + '="' + config[item.key] + '"\n';
+                }
+            });
+            tag += '    defer&gt;\n&lt;/script&gt;';
+            document.getElementById('script-tag').innerHTML = tag;
+            document.getElementById('script-card').style.display = '';
+        }
+
+        async function loadUIXGuest() {
+            const cdns = [
+                'https://unpkg.com/@adobe/uix-guest@1/dist/index.mjs',
+                'https://esm.sh/@adobe/uix-guest@1'
+            ];
+            for (const url of cdns) {
+                try {
+                    const mod = await import(url);
+                    if (mod.register) return mod.register;
+                } catch (e) {
+                    console.warn('[SSO Extension] Failed to load from', url, e);
+                }
+            }
+            throw new Error('Could not load @adobe/uix-guest from any CDN');
+        }
+
+        async function init() {
+            let register;
+            try {
+                register = await loadUIXGuest();
+            } catch (err) {
+                setStatus('error', 'Failed to load UIX SDK');
+                document.getElementById('error-details').textContent = err.message;
+                document.getElementById('error-card').style.display = '';
+                return;
+            }
+
+            try {
+                const guestConnection = await register({
+                    id: EXTENSION_ID,
+                    methods: {
+                        headerMenu: {
+                            getButtons() {
+                                return [];
+                            }
+                        }
+                    }
+                });
+
+                const config = guestConnection.configuration || {};
+                setStatus('ok', 'Connected to Extension Manager');
+                renderConfig(config);
+                renderScriptTag(config);
+                console.log('[SSO Extension] Registered. Config:', config);
+            } catch (err) {
+                setStatus('error', 'Registration failed');
+                document.getElementById('error-details').textContent =
+                    err.message + '\n\nThis can happen if:\n' +
+                    '- The extension is opened outside Extension Manager\n' +
+                    '- The selected Supported Service does not match\n' +
+                    '- Extension Manager is temporarily unavailable';
+                document.getElementById('error-card').style.display = '';
+                console.error('[SSO Extension] Registration error:', err);
+            }
+        }
+
+        init();
     </script>
 </body>
 </html>
