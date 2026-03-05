@@ -222,10 +222,13 @@
     }
 
     function findAndInject() {
+        if (document.querySelector('.aem-sso-root')) return;
+
         for (var i = 0; i < SIGN_IN_SELECTORS.length; i++) {
             var forms = document.querySelectorAll(SIGN_IN_SELECTORS[i]);
             for (var j = 0; j < forms.length; j++) {
                 injectButton(forms[j]);
+                if (document.querySelector('.aem-sso-root')) return;
             }
         }
     }
