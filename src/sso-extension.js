@@ -265,14 +265,21 @@
     }
 
     function handleTokenResponse(container, config, data) {
-        var token = data[config.tokenField] || data.access_token || data.id_token || data.customer_token;
+        // Prefer customer_token for Adobe Commerce token session when IdP returns it
+        var customerToken = data.customer_token || null;
+        var token = customerToken || data[config.tokenField] || data.access_token || data.id_token;
         if (!token) {
             showCallbackError(container, 'No token received from identity provider.');
             return;
         }
 
-        window.localStorage.setItem('signin_token', JSON.stringify(token));
-        document.cookie = 'cif.userToken=' + encodeURIComponent(token) + ';path=/;secure;samesite=strict';
+        // Adobe Commerce token session: store token for CIF GraphQL, customer session, and cart
+        var tokenForSession = customerToken || token;
+        window.localStorage.setItem('signin_token', JSON.stringify(tokenForSession));
+        document.cookie = 'cif.userToken=' + encodeURIComponent(tokenForSession) + ';path=/;secure;samesite=strict';
+        if (customerToken) {
+            window.localStorage.setItem('commerce_customer_token', tokenForSession);
+        }
         document.cookie = 'sso.idToken=' + encodeURIComponent(data.id_token || '') + ';path=/;secure;samesite=strict';
 
         if (data.refresh_token) {
@@ -389,6 +396,17 @@
             .observe(document.body, { childList: true, subtree: true });
     }
 
+    // ── Apply commerce_customer_token to AEM session (login + GraphQL) ───
+
+    function applyCommerceCustomerTokenToSession() {
+        try {
+            var commerceToken = window.localStorage.getItem('commerce_customer_token');
+            if (!commerceToken) return;
+            window.localStorage.setItem('signin_token', JSON.stringify(commerceToken));
+            document.cookie = 'cif.userToken=' + encodeURIComponent(commerceToken) + ';path=/;secure;samesite=strict';
+        } catch (e) {}
+    }
+
     // ── Initialization ─────────────────────────────────────────────────
 
     function init() {
@@ -397,6 +415,7 @@
             if (handleCallback()) return;
         }
 
+        applyCommerceCustomerTokenToSession();
         injectStyles();
 
         if (document.readyState === 'loading') {
