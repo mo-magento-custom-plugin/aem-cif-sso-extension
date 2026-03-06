@@ -15,6 +15,7 @@
     var BUTTON_CLASS = 'aem-sso-btn';
     var STATE_KEY = 'sso_oauth_state';
     var NONCE_KEY = 'sso_oauth_nonce';
+    var PKCE_VERIFIER_KEY = 'sso_pkce_code_verifier';
 
     var SIGN_IN_SELECTORS = [
         'form[class*="signIn"]',
@@ -50,11 +51,14 @@
                 contentType:   scriptTag.getAttribute('data-content-type'),
                 callbackPath:  scriptTag.getAttribute('data-callback-path'),
                 postLoginUrl:  scriptTag.getAttribute('data-post-login-url'),
-                extraParams:   scriptTag.getAttribute('data-extra-params')
+                extraParams:   scriptTag.getAttribute('data-extra-params'),
+                usePkce:      scriptTag.getAttribute('data-use-pkce')
             };
         }
 
         var g = window.aemSsoConfig || window.aemCifSsoConfig || {};
+        var usePkceAttr = d.usePkce || g.usePkce;
+        var usePkce = usePkceAttr === undefined || usePkceAttr === '' || usePkceAttr === 'true' || usePkceAttr === '1';
 
         return {
             authorizeUrl:  g.authorizeUrl  || d.authorizeUrl  || '',
@@ -72,7 +76,8 @@
             contentType:   g.contentType   || d.contentType   || 'application/x-www-form-urlencoded',
             callbackPath:  g.callbackPath  || d.callbackPath  || '/sso/callback',
             postLoginUrl:  g.postLoginUrl  || d.postLoginUrl  || '/',
-            extraParams:   g.extraParams   || (d.extraParams ? JSON.parse(d.extraParams) : {})
+            extraParams:   g.extraParams   || (d.extraParams ? JSON.parse(d.extraParams) : {}),
+            usePkce:       usePkce
         };
     }
 
@@ -84,6 +89,23 @@
         return Array.from(array, function (b) {
             return b.toString(16).padStart(2, '0');
         }).join('');
+    }
+
+    function base64UrlEncode(bytes) {
+        var binary = '';
+        for (var i = 0; i < bytes.length; i++) binary += String.fromCharCode(bytes[i]);
+        return btoa(binary).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+    }
+
+    function generateCodeVerifier() {
+        var array = new Uint8Array(32);
+        window.crypto.getRandomValues(array);
+        return base64UrlEncode(array);
+    }
+
+    function computeCodeChallenge(verifier) {
+        return window.crypto.subtle.digest('SHA-256', new TextEncoder().encode(verifier))
+            .then(function (hash) { return base64UrlEncode(new Uint8Array(hash)); });
     }
 
     function initiateLogin() {
@@ -107,13 +129,32 @@
             nonce: nonce
         };
 
+        var usePkce = config.usePkce !== false;
+        if (usePkce) {
+            var verifier = generateCodeVerifier();
+            sessionStorage.setItem(PKCE_VERIFIER_KEY, verifier);
+            computeCodeChallenge(verifier).then(function (challenge) {
+                params.code_challenge = challenge;
+                params.code_challenge_method = 'S256';
+                doRedirect(config, params);
+            }).catch(function () {
+                sessionStorage.removeItem(PKCE_VERIFIER_KEY);
+                params.code_challenge = verifier;
+                params.code_challenge_method = 'plain';
+                doRedirect(config, params);
+            });
+        } else {
+            doRedirect(config, params);
+        }
+    }
+
+    function doRedirect(config, params) {
         var extra = config.extraParams;
         if (extra && typeof extra === 'object') {
             for (var key in extra) {
                 if (extra.hasOwnProperty(key)) params[key] = extra[key];
             }
         }
-
         var query = new URLSearchParams(params).toString();
         window.location.href = config.authorizeUrl + '?' + query;
     }
@@ -169,6 +210,9 @@
             return true;
         }
 
+        var codeVerifier = sessionStorage.getItem(PKCE_VERIFIER_KEY);
+        if (codeVerifier) sessionStorage.removeItem(PKCE_VERIFIER_KEY);
+
         var body;
         var headers = {};
 
@@ -181,6 +225,7 @@
                 redirect_uri: config.redirectUri
             };
             if (config.clientSecret) payload.client_secret = config.clientSecret;
+            if (codeVerifier) payload.code_verifier = codeVerifier;
             body = JSON.stringify(payload);
         } else {
             headers['Content-Type'] = 'application/x-www-form-urlencoded';
@@ -191,13 +236,22 @@
                 redirect_uri: config.redirectUri
             });
             if (config.clientSecret) formData.append('client_secret', config.clientSecret);
+            if (codeVerifier) formData.append('code_verifier', codeVerifier);
             body = formData.toString();
         }
 
         fetch(config.tokenUrl, { method: 'POST', headers: headers, body: body })
             .then(function (res) {
-                if (!res.ok) throw new Error('Token exchange failed (' + res.status + ')');
-                return res.json();
+                return res.text().then(function (text) {
+                    var data;
+                    try { data = text ? JSON.parse(text) : {}; } catch (e) { data = {}; }
+                    if (!res.ok) {
+                        var msg = data.error_description || data.error || data.message || ('Token exchange failed (' + res.status + ')');
+                        if (data.error) msg = data.error + (data.error_description ? ': ' + data.error_description : '');
+                        throw new Error(msg);
+                    }
+                    return data;
+                });
             })
             .then(function (data) {
                 handleTokenResponse(container, config, data);
