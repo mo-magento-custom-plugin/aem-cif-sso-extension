@@ -16,6 +16,16 @@
     var STATE_KEY = 'sso_oauth_state';
     var NONCE_KEY = 'sso_oauth_nonce';
     var PKCE_VERIFIER_KEY = 'sso_pkce_code_verifier';
+    var VENIA_SIGNIN_KEY = 'M2_VENIA_BROWSER_PERSISTENCE__signin_token';
+    var VENIA_TTL = 3600;
+
+    function veniaSigninPersistenceValue(tokenStr) {
+        return JSON.stringify({
+            value: JSON.stringify(tokenStr),
+            timeStored: Date.now(),
+            ttl: VENIA_TTL
+        });
+    }
 
     var SIGN_IN_SELECTORS = [
         'form[class*="signIn"]',
@@ -273,10 +283,10 @@
             return;
         }
 
-        // Adobe Commerce token session: store token for CIF GraphQL, customer session, and cart
+        // Adobe Commerce token session: match Venia default login format for session
         var tokenForSession = customerToken || token;
         var tokenStr = typeof tokenForSession === 'string' ? tokenForSession : JSON.stringify(tokenForSession);
-        window.localStorage.setItem('signin_token', tokenStr);
+        window.localStorage.setItem(VENIA_SIGNIN_KEY, veniaSigninPersistenceValue(tokenStr));
         document.cookie = 'cif.userToken=' + encodeURIComponent(tokenStr) + ';path=/;secure;samesite=strict';
         if (customerToken) {
             window.localStorage.setItem('commerce_customer_token', tokenStr);
@@ -403,8 +413,7 @@
         try {
             var commerceToken = window.localStorage.getItem('commerce_customer_token');
             if (!commerceToken) return;
-            // Venia/Peregrine often expect raw token string in signin_token (not JSON-wrapped)
-            window.localStorage.setItem('signin_token', commerceToken);
+            window.localStorage.setItem(VENIA_SIGNIN_KEY, veniaSigninPersistenceValue(commerceToken));
             document.cookie = 'cif.userToken=' + encodeURIComponent(commerceToken) + ';path=/;secure;samesite=strict';
         } catch (e) {}
     }
