@@ -18,6 +18,7 @@
     var PKCE_VERIFIER_KEY = 'sso_pkce_code_verifier';
     var VENIA_SIGNIN_KEY = 'M2_VENIA_BROWSER_PERSISTENCE__signin_token';
     var VENIA_TTL = 3600;
+    var SSO_RELOAD_FLAG = 'sso_redirect_reload';
 
     function veniaSigninPersistenceValue(tokenStr) {
         return JSON.stringify({
@@ -424,6 +425,12 @@
         var config = getConfig();
         if (window.location.pathname === config.callbackPath) {
             if (handleCallback()) return;
+        }
+
+        if (sessionStorage.getItem(SSO_RELOAD_FLAG) && window.localStorage.getItem('commerce_customer_token')) {
+            sessionStorage.removeItem(SSO_RELOAD_FLAG);
+            window.location.reload();
+            return;
         }
 
         applyCommerceCustomerTokenToSession();
